@@ -19,9 +19,7 @@ import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Maybe;
 import io.reactivex.rxjava3.core.Single;
 import io.vertx.core.DeploymentOptions;
-import io.vertx.core.json.JsonObject;
 import io.vertx.rxjava3.core.AbstractVerticle;
-import io.vertx.rxjava3.core.RxHelper;
 import io.vertx.rxjava3.core.Vertx;
 import io.vertx.rxjava3.core.http.HttpServer;
 import io.vertx.rxjava3.ext.web.Router;
@@ -31,7 +29,10 @@ import io.vertx.rxjava3.ext.web.handler.BodyHandler;
 public class MainVerticleStage extends AbstractVerticle {
 
 	private static final Logger logger = LoggerFactory.getLogger(MainVerticleStage.class);
-	private Stage.SessionFactory emf; // <1>
+	/**
+	 * Factory is static and thus shared across all verticles
+	 */
+	private static Stage.SessionFactory emf;
 	private HttpServer rxHttpServer;
 
 	public static SessionFactory sessionFactory(String url, String user, String pass, boolean logEnabled, int poolSize) {
@@ -71,34 +72,19 @@ public class MainVerticleStage extends AbstractVerticle {
 	public Completable rxStart() {
 		this.rxHttpServer = vertx.createHttpServer();
 		Router router = Router.router(vertx);
-		Completable startHibernate = Single.fromCallable(() -> {
-			var pgPort = config().getInteger("pgPort", 5432);
-			emf = sessionFactory("jdbc:postgresql://localhost:" + pgPort + "/postgres",
-				"postgres",
-				"vertx-in-action",
-				false,
-				10).unwrap(Stage.SessionFactory.class);
-			return emf;
-		})
-			.subscribeOn(RxHelper.blockingScheduler(vertx))
-			.doOnSuccess(e -> {
-				logger.info("✅ Hibernate Reactive is ready");
-				BodyHandler bodyHandler = BodyHandler.create();
-				router.post().handler(bodyHandler::handle);
 
-				router.get("/products").respond(this::listProducts);
-				router.get("/products/:id").respond(this::getProduct);
-				router.post("/products").respond(this::createProduct);
+		BodyHandler bodyHandler = BodyHandler.create();
+		router.post().handler(bodyHandler::handle);
 
-			}).ignoreElement();
+		router.get("/products").respond(this::listProducts);
+		router.get("/products/:id").respond(this::getProduct);
+		router.post("/products").respond(this::createProduct);
 
-		Completable startHttpServer = rxHttpServer
+		return rxHttpServer
 			.requestHandler(router::handle)
 			.listen(8080)
 			.doOnSubscribe(s -> logger.info("✅ HTTP server listening on port 8080"))
 			.ignoreElement();
-
-		return Completable.mergeArray(startHibernate, startHttpServer);
 	}
 
 	@Override
@@ -140,14 +126,20 @@ public class MainVerticleStage extends AbstractVerticle {
 
 		postgreSQLContainer.start();
 
+		var pgPort = postgreSQLContainer.getMappedPort(5432);
+		emf = sessionFactory("jdbc:postgresql://localhost:" + pgPort + "/postgres",
+			"postgres",
+			"vertx-in-action",
+			false,
+			10).unwrap(Stage.SessionFactory.class);
+		logger.info("✅ Hibernate Reactive is ready");
 		long tcTime = System.currentTimeMillis();
 
 		logger.info("🚀 Starting Vert.x");
 
 		Vertx vertx = Vertx.vertx();
 
-		DeploymentOptions options = new DeploymentOptions().setConfig(new JsonObject()
-			.put("pgPort", postgreSQLContainer.getMappedPort(5432))); // <1>
+		DeploymentOptions options = new DeploymentOptions();
 		options.setInstances(8);
 
 		vertx.deployVerticle(MainVerticleStage::new, options).subscribe(d -> {

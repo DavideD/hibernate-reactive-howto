@@ -13,11 +13,12 @@
 		<maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
 		<exec-maven-plugin.version>3.0.0</exec-maven-plugin.version>
 		<main.verticle>io.vertx.howtos.hr.MainVerticle</main.verticle>
-		<hibernate-reactive-core.version>1.0.0.Final</hibernate-reactive-core.version>
+		<hibernate-reactive-core.version>1.1.0.Final</hibernate-reactive-core.version>
 		<logback-classic.version>1.2.6</logback-classic.version>
 		<testcontainers.version>1.16.0</testcontainers.version>
 		<jackson-databind.version>2.13.0</jackson-databind.version>
-		<vertx.version>4.1.5</vertx.version>
+		<!-- 4.1.5 is okay -->
+		<vertx.version>4.2.1</vertx.version>
 	</properties>
 
 	<dependencies>
