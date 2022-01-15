@@ -10,6 +10,7 @@ import org.hibernate.cfg.Environment;
 import org.hibernate.reactive.provider.ReactivePersistenceProvider;
 import org.hibernate.reactive.provider.ReactiveServiceRegistryBuilder;
 import org.hibernate.reactive.stage.Stage;
+import org.hibernate.reactive.vertx.VertxInstance;
 import org.hibernate.service.ServiceRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +36,7 @@ public class MainVerticleStage extends AbstractVerticle {
 	private static Stage.SessionFactory emf;
 	private HttpServer rxHttpServer;
 
-	public static SessionFactory sessionFactory(String url, String user, String pass, boolean logEnabled, int poolSize) {
+	public static SessionFactory sessionFactory(String url, String user, String pass, boolean logEnabled, int poolSize, io.vertx.core.Vertx vertx) {
 		Configuration configuration = new Configuration();
 		Properties settings = new Properties();
 
@@ -64,7 +65,9 @@ public class MainVerticleStage extends AbstractVerticle {
 		configuration.setProperties(settings);
 		configuration.addAnnotatedClass(Product.class);
 
-		ServiceRegistry serviceRegistry = new ReactiveServiceRegistryBuilder().applySettings(configuration.getProperties()).build();
+		ServiceRegistry serviceRegistry = new ReactiveServiceRegistryBuilder()
+				.addService( VertxInstance.class, (VertxInstance) () -> vertx )
+				.applySettings(configuration.getProperties()).build();
 		return configuration.buildSessionFactory(serviceRegistry);
 	}
 
@@ -126,18 +129,19 @@ public class MainVerticleStage extends AbstractVerticle {
 
 		postgreSQLContainer.start();
 
+		Vertx vertx = Vertx.vertx();
+
 		var pgPort = postgreSQLContainer.getMappedPort(5432);
 		emf = sessionFactory("jdbc:postgresql://localhost:" + pgPort + "/postgres",
 			"postgres",
 			"vertx-in-action",
 			false,
-			10).unwrap(Stage.SessionFactory.class);
+			10,
+			vertx.getDelegate()).unwrap(Stage.SessionFactory.class);
 		logger.info("✅ Hibernate Reactive is ready");
 		long tcTime = System.currentTimeMillis();
 
 		logger.info("🚀 Starting Vert.x");
-
-		Vertx vertx = Vertx.vertx();
 
 		DeploymentOptions options = new DeploymentOptions();
 		options.setInstances(8);
